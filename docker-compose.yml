@@ -1,0 +1,7 @@
+version: "3.7"
+services:
+  docmake:
+    image: docker.pkg.github.com/$OWNER/$REPO/docmake:$TAG
+    build: .
+    volumes:
+    - ./:/docmake

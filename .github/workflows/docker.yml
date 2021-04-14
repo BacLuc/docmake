@@ -1,0 +1,79 @@
+name: build image
+
+on:
+  push:
+    branches:
+      - '**'
+    tags:
+      - '*.*.*'
+  pull_request:
+    branches:
+      - 'main'
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - id: lowercase_owner
+        uses: ASzc/change-string-case-action@v1
+        with:
+          string: ${{ github.repository_owner }}
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+
+      - name: Build
+        env:
+          OWNER: ${{ steps.lowercase_owner.outputs.lowercase }}
+          TAG: latest
+        run: |
+          docker-compose build --no-cache
+
+      - name: Run
+        env:
+          OWNER: ${{ steps.lowercase_owner.outputs.lowercase }}
+          TAG: latest
+        run: |
+          docker-compose run --rm docmake
+
+      - name: Get tag
+        if: ${{ contains(github.ref, 'release') }}
+        id: vars
+        run: echo ::set-output name=tag::${GITHUB_REF#refs/*/}
+
+      - name: Check output
+        if: ${{ contains(github.ref, 'release') }}
+        env:
+          RELEASE_VERSION: ${{ steps.vars.outputs.tag }}
+        run: |
+          echo $RELEASE_VERSION
+          echo ${{ steps.vars.outputs.tag }}
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v1
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push
+        if: ${{ contains(github.ref, 'release') }}
+        env:
+          OWNER: ${{ steps.lowercase_owner.outputs.lowercase }}
+          TAG: ${{ steps.vars.outputs.tag }}
+        run: |
+          docker-compose build
+          docker-compose push
+
+      - name: Test release
+        env:
+          OWNER: ${{ steps.lowercase_owner.outputs.lowercase }}
+          TAG: ${{ steps.vars.outputs.tag }}
+        run: |
+          docker-compose pull
+          docker-compose run --rm docmake
